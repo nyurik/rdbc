@@ -1,4 +1,4 @@
-use nom::error::{ContextError, ErrorKind, ParseError};
+use nom::error::{ContextError, ErrorKind, FromExternalError, ParseError};
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum DbcParseError {
@@ -135,5 +135,12 @@ impl ContextError<&str> for DbcParseError {
         // let message = format!("{}\"{}\":\t{:?}\n", other, ctx, input);
         // log::debug!("{}", message);
         // DbcParseError::DebugMsg(message)
+    }
+}
+
+// FIXME: this does not seem correct
+impl<E> FromExternalError<&str, E> for DbcParseError {
+    fn from_external_error(_input: &str, _kind: ErrorKind, _e: E) -> Self {
+        Self::Unparseable
     }
 }

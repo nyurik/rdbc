@@ -3,14 +3,14 @@ use std::fmt;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::line_ending;
-use nom::combinator::{map, opt};
+use nom::combinator::{map, map_res, opt};
 use nom::multi::{many0, separated_list0};
 use nom::sequence::{delimited, pair, separated_pair};
 use nom::{IResult, Parser};
 
 use super::char_string::{parser_char_string, CharString};
 use super::common_parsers::{
-    multispacey, number_value, parser_node_name, parser_signal_name, spacey, unsigned_integer,
+    multispacey, number_str_value, parser_node_name, parser_signal_name, spacey, unsigned_integer,
 };
 use super::error::DbcParseError;
 
@@ -57,7 +57,7 @@ impl fmt::Display for MultiplexerIndicator {
 }
 
 /// Endianness: 1 = little-endian, Intel; 0 = big-endian, Motorola
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ByteOrder {
     LittleEndian,
@@ -74,7 +74,7 @@ impl fmt::Display for ByteOrder {
 }
 
 /// Signed: + = unsigned; - = signed
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ValueType {
     Signed,
@@ -86,6 +86,38 @@ impl fmt::Display for ValueType {
         match self {
             ValueType::Signed => write!(f, "-"),
             ValueType::Unsigned => write!(f, "+"),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum NumType {
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+}
+
+impl fmt::Display for NumType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NumType::Signed(v) => write!(f, "{v}"),
+            NumType::Unsigned(v) => write!(f, "{v}"),
+            NumType::Float(v) => write!(f, "{v}"),
+        }
+    }
+}
+
+impl NumType {
+    pub fn new(value: &str) -> Result<Self, DbcParseError> {
+        if let Ok(v) = value.parse::<u64>() {
+            Ok(NumType::Unsigned(v))
+        } else if let Ok(v) = value.parse::<i64>() {
+            Ok(NumType::Signed(v))
+        } else if let Ok(v) = value.parse::<f64>() {
+            Ok(NumType::Float(v))
+        } else {
+            Err(DbcParseError::BadAttributeFloatValueType)
         }
     }
 }
@@ -127,10 +159,10 @@ pub struct Signal {
     pub size: u32,
     pub byte_order: ByteOrder,
     pub value_type: ValueType,
-    pub factor: f64,
-    pub offset: f64,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
+    pub factor: NumType,
+    pub offset: NumType,
+    pub min: Option<NumType>,
+    pub max: Option<NumType>,
     pub unit: Option<CharString>,
     pub receivers: Option<Vec<String>>,
 }
@@ -222,10 +254,10 @@ fn parser_signal_value_type(input: &str) -> IResult<&str, ValueType, DbcParseErr
     .parse(input)
 }
 
-fn parser_signal_factor_offset(input: &str) -> IResult<&str, (f64, f64), DbcParseError> {
+fn parser_signal_factor_offset(input: &str) -> IResult<&str, (&str, &str), DbcParseError> {
     let (remain, (factor, offset)) = delimited(
         spacey(tag("(")),
-        separated_pair(number_value, spacey(tag(",")), number_value),
+        separated_pair(number_str_value, spacey(tag(",")), number_str_value),
         spacey(tag(")")),
     )
     .parse(input)?;
@@ -233,10 +265,10 @@ fn parser_signal_factor_offset(input: &str) -> IResult<&str, (f64, f64), DbcPars
     Ok((remain, (factor, offset)))
 }
 
-fn parser_signal_min_max(input: &str) -> IResult<&str, (f64, f64), DbcParseError> {
+fn parser_signal_min_max(input: &str) -> IResult<&str, (&str, &str), DbcParseError> {
     let (remain, (min_value, max_value)) = delimited(
         spacey(tag("[")),
-        separated_pair(number_value, spacey(tag("|")), number_value),
+        separated_pair(number_str_value, spacey(tag("|")), number_str_value),
         spacey(tag("]")),
     )
     .parse(input)?;
@@ -255,7 +287,7 @@ fn parser_signal_receivers(input: &str) -> IResult<&str, Vec<String>, DbcParseEr
 }
 
 pub fn parser_signal(input: &str) -> IResult<&str, Signal, DbcParseError> {
-    let res = map(
+    let res = map_res(
         (
             multispacey(tag("SG_")),
             spacey(parser_signal_name),
@@ -287,21 +319,23 @@ pub fn parser_signal(input: &str) -> IResult<&str, Signal, DbcParseError> {
             factor_offset,
             min_max,
             unit,
-            receiving_nodes,
+            receivers,
             _,
-        )| Signal {
-            name: String::from(name),
-            multiplexer,
-            start_bit,
-            size,
-            byte_order,
-            value_type,
-            factor: factor_offset.0,
-            offset: factor_offset.1,
-            min: min_max.map(|(min, _)| min),
-            max: min_max.map(|(_, max)| max),
-            unit,
-            receivers: receiving_nodes,
+        )| {
+            Ok::<_, DbcParseError>(Signal {
+                name: String::from(name),
+                multiplexer,
+                start_bit,
+                size,
+                byte_order,
+                value_type,
+                factor: NumType::new(factor_offset.0)?,
+                offset: NumType::new(factor_offset.1)?,
+                min: min_max.map(|(min, _)| NumType::new(min)).transpose()?,
+                max: min_max.map(|(_, max)| NumType::new(max)).transpose()?,
+                unit,
+                receivers,
+            })
         },
     )
     .parse(input);
@@ -396,10 +430,10 @@ mod tests {
                         size: 16,
                         byte_order: ByteOrder::LittleEndian,
                         value_type: ValueType::Unsigned,
-                        factor: 0.000_127_465,
-                        offset: -4.1768,
-                        min: Some(-4.1768),
-                        max: Some(4.1765),
+                        factor: NumType::Float(0.000_127_465),
+                        offset: NumType::Float(-4.1768),
+                        min: Some(NumType::Float(-4.1768)),
+                        max: Some(NumType::Float(4.1765)),
                         unit: Some(CharString("g".into())),
                         receivers: Some(vec!["ABS".into()]),
                     }
@@ -431,10 +465,10 @@ mod tests {
                         size: 8,
                         byte_order: ByteOrder::LittleEndian,
                         value_type: ValueType::Signed,
-                        factor: 1.0,
-                        offset: 0.0,
-                        min: Some(0.0),
-                        max: Some(0.0),
+                        factor: NumType::Float(1.0),
+                        offset: NumType::Float(0.0),
+                        min: Some(NumType::Float(0.0)),
+                        max: Some(NumType::Float(0.0)),
                         unit: Some(CharString(String::new())),
                         receivers: Some(vec!["Vector__XXX".into()]),
                     }
@@ -466,10 +500,10 @@ mod tests {
                         size: 8,
                         byte_order: ByteOrder::LittleEndian,
                         value_type: ValueType::Signed,
-                        factor: 1.0,
-                        offset: 0.0,
-                        min: Some(0.0),
-                        max: Some(0.0),
+                        factor: NumType::Unsigned(1),
+                        offset: NumType::Unsigned(0),
+                        min: Some(NumType::Unsigned(0)),
+                        max: Some(NumType::Unsigned(0)),
                         unit: Some(CharString(String::new())),
                         receivers: Some(vec!["Vector__XXX".into()]),
                     }
@@ -498,10 +532,10 @@ mod tests {
                         size: 32,
                         byte_order: ByteOrder::LittleEndian,
                         value_type: ValueType::Unsigned,
-                        factor: 100.0,
-                        offset: 0.0,
-                        min: Some(0.0),
-                        max: Some(100.0),
+                        factor: NumType::Unsigned(100),
+                        offset: NumType::Unsigned(0),
+                        min: Some(NumType::Unsigned(0)),
+                        max: Some(NumType::Unsigned(100)),
                         unit: Some(CharString("%".into())),
                         receivers: Some(vec!["Node1".into(), "Node2".into()]),
                     }

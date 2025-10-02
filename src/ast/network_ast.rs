@@ -225,6 +225,7 @@ mod tests {
     use crate::ast::env_var::EnvVarType;
     use crate::ast::message::MessageHeader;
     use crate::ast::signal;
+    use crate::ast::signal::NumType;
     use crate::ast::value_descriptions::{ValueDescriptionItem, ValueDescriptions};
 
     #[test]
@@ -280,10 +281,10 @@ BO_ 112 MM5_10_TX1: 8 DRS_MM5_10
                                 size: 16,
                                 byte_order: signal::ByteOrder::LittleEndian,
                                 value_type: signal::ValueType::Unsigned,
-                                factor: 0.005,
-                                offset: -163.84,
-                                min: Some(-163.84),
-                                max: Some(163.83),
+                                factor: NumType::Float(0.005),
+                                offset: NumType::Float(-163.84),
+                                min: Some(NumType::Float(-163.84)),
+                                max: Some(NumType::Float(163.83)),
                                 unit: Some(CharString("°/s".into())),
                                 receivers: Some(vec!["ABS".into()]),
                             },
@@ -294,10 +295,10 @@ BO_ 112 MM5_10_TX1: 8 DRS_MM5_10
                                 size: 16,
                                 byte_order: signal::ByteOrder::LittleEndian,
                                 value_type: signal::ValueType::Unsigned,
-                                factor: 0.000_127_465,
-                                offset: -4.1768,
-                                min: Some(-4.1768),
-                                max: Some(4.1765),
+                                factor: NumType::Float(0.000_127_465),
+                                offset: NumType::Float(-4.1768),
+                                min: Some(NumType::Float(-4.1768)),
+                                max: Some(NumType::Float(4.1765)),
                                 unit: Some(CharString("g".into())),
                                 receivers: Some(vec!["ABS".into()]),
                             }
@@ -445,10 +446,10 @@ VAL_ ReadOnlyEnvVar 2 "Value2" 1 "Value1" 0 "Value0" ;
                                 size: 16,
                                 byte_order: signal::ByteOrder::LittleEndian,
                                 value_type: signal::ValueType::Unsigned,
-                                factor: 0.005,
-                                offset: -163.84,
-                                min: Some(-163.84),
-                                max: Some(163.83),
+                                factor: NumType::Float(0.005),
+                                offset: NumType::Float(-163.84),
+                                min: Some(NumType::Float(-163.84)),
+                                max: Some(NumType::Float(163.83)),
                                 unit: Some(CharString("°/s".into())),
                                 receivers: Some(vec!["ABS".into()]),
                             },
@@ -459,10 +460,10 @@ VAL_ ReadOnlyEnvVar 2 "Value2" 1 "Value1" 0 "Value0" ;
                                 size: 16,
                                 byte_order: signal::ByteOrder::LittleEndian,
                                 value_type: signal::ValueType::Unsigned,
-                                factor: 0.000_127_465,
-                                offset: -4.1768,
-                                min: Some(-4.1768),
-                                max: Some(4.1765),
+                                factor: NumType::Float(0.000_127_465),
+                                offset: NumType::Float(-4.1768),
+                                min: Some(NumType::Float(-4.1768)),
+                                max: Some(NumType::Float(4.1765)),
                                 unit: Some(CharString("g".into())),
                                 receivers: Some(vec!["ABS".into()]),
                             }
